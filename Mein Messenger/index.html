@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Klassen Chat</title>
+    <style>
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body { font-family: 'Segoe UI', sans-serif; background-color: #e5ddd5; margin: 0; display: flex; height: 100vh; overflow: hidden; }
+        
+        #sidebar { 
+            width: 320px; 
+            background: #075e54; 
+            color: white; 
+            display: flex; 
+            flex-direction: column; 
+            transition: 0.3s; 
+            position: absolute; 
+            height: 100%; 
+            z-index: 1000; 
+            left: -320px; 
+            box-shadow: 4px 0 10px rgba(0,0,0,0.3); 
+        }
+        #sidebar.open { left: 0; }
+        #sidebar-header { padding: 25px 20px; font-size: 22px; font-weight: bold; border-bottom: 1px solid #128c7e; display: flex; justify-content: space-between; align-items: center; }
+        
+        .sidebar-item { padding: 18px 20px; cursor: pointer; border-bottom: 1px solid #128c7e; font-size: 17px; }
+        .sidebar-item:hover { background: #128c7e; }
+        .sidebar-item.active { background: #25D366; font-weight: bold; }
+
+        .sidebar-section { padding: 20px; border-bottom: 1px solid #128c7e; background: #054d44; }
+        .sidebar-section label { font-size: 12px; display: block; margin-bottom: 8px; opacity: 0.8; text-transform: uppercase; letter-spacing: 1px; }
+        .sidebar-section input { width: 100%; padding: 12px; border-radius: 8px; border: none; margin-bottom: 10px; color: black; font-size: 16px; }
+
+        #main-content { flex: 1; display: flex; flex-direction: column; width: 100%; position: relative; height: 100%; }
+        #header { background: #075e54; color: white; padding: 10px 15px; display: flex; align-items: center; height: 70px; padding-top: env(safe-area-inset-top); }
+        #menu-toggle { font-size: 30px; cursor: pointer; margin-right: 15px; background: rgba(255,255,255,0.1); width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; border-radius: 10px; }
+        
+        #chat-window { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 10px; }
+        
+        .message { 
+            padding: 10px 14px; 
+            border-radius: 15px; 
+            max-width: 85%; 
+            align-self: flex-start !important; 
+            background: white; 
+            box-shadow: 0 1px 2px rgba(0,0,0,0.15); 
+            position: relative; 
+            word-wrap: break-word; 
+            font-size: 16px;
+        }
+        .my-message { background: #dcf8c6; border: 1px solid #cce6b8; }
+        .message img { max-width: 100%; border-radius: 10px; margin-top: 8px; display: block; }
+        .message b { color: #075e54; font-size: 13px; display: block; margin-bottom: 4px; }
+
+        .input-area { 
+            background: #f0f0f0; 
+            padding: 12px; 
+            display: flex; 
+            gap: 10px; 
+            border-top: 1px solid #ddd; 
+            align-items: center;
+            padding-bottom: calc(12px + env(safe-area-inset-bottom)); 
+        }
+
+        input#message-input { flex: 1; padding: 14px; border: none; border-radius: 25px; outline: none; font-size: 16px; box-shadow: inset 0 1px 2px rgba(0,0,0,0.1); }
+        .icon-btn { background: none; border: none; font-size: 24px; cursor: pointer; color: #51585c; display: flex; align-items: center; }
+        #send-btn { background: #128c7e; color: white; border: none; width: 50px; height: 50px; border-radius: 50%; cursor: pointer; font-size: 22px; display: flex; align-items: center; justify-content: center; }
+
+        #auth-container { position: fixed; inset: 0; background: #075e54; z-index: 8000; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 25px; color: white; }
+        #auth-container input { width: 100%; max-width: 320px; padding: 15px; margin: 10px; border-radius: 10px; border: none; font-size: 16px; }
+        #auth-container button { width: 100%; max-width: 320px; padding: 15px; background: #25D366; color: white; border: none; border-radius: 10px; font-weight: bold; font-size: 18px; }
+        
+        #context-menu { display: none; position: fixed; background: white; border: 1px solid #ddd; box-shadow: 2px 2px 15px rgba(0,0,0,0.2); z-index: 9000; border-radius: 10px; }
+        #context-menu div { padding: 15px 25px; cursor: pointer; border-bottom: 1px solid #eee; font-size: 15px; }
+    </style>
+</head>
+<body>
+
+<div id="context-menu">
+    <div id="btn-soft-delete">Nachricht löschen</div>
+    <div id="btn-admin-hard-delete" style="display:none; color: #b91c1c; font-weight: bold;">Endgültig löschen (Admin)</div>
+</div>
+
+<div id="sidebar">
+    <div id="sidebar-header">Menü <span onclick="toggleSidebar()" style="cursor:pointer">✕</span></div>
+    <div class="sidebar-item active" id="item-global" onclick="switchRoom('global')">🏫 Klassen Chat</div>
+    <div class="sidebar-item" style="background:#1a73e8; border-bottom: 2px solid #0d47a1;" id="item-ai" onclick="switchRoom('ai_chat')">🤖 KI Assistent</div>
+    <div id="group-list"></div>
+    <div class="sidebar-section">
+        <label>Dein Passwort ändern</label>
+        <input type="password" id="change-pw-input" placeholder="Neues Passwort...">
+        <button onclick="changeOwnPassword()" style="width:100%; background:#128c7e; border:none; padding:12px; border-radius:8px; color:white; font-weight:bold;">Speichern</button>
+    </div>
+    <div id="admin-group-tools" class="sidebar-section" style="display:none;">
+        <label>Admin: Neue Gruppe</label>
+        <input type="text" id="new-group-name" placeholder="Name der Gruppe...">
+        <button onclick="createGroup()" style="width:100%; background:#25D366; border:none; padding:12px; border-radius:8px; color:white; font-weight:bold;">+ Gruppe erstellen</button>
+    </div>
+    <div class="sidebar-item" onclick="logout()" style="background:#b91c1c; text-align:center; margin-top:auto; font-weight:bold;">Abmelden</div>
+</div>
+
+<div id="main-content">
+    <div id="auth-container">
+        <h2 style="font-size: 28px; margin-bottom: 20px;">Klassen Chat 🏫</h2>
+        <input type="text" id="username" placeholder="Dein Name">
+        <input type="password" id="password" placeholder="Passwort">
+        <button onclick="handleAuth()">Anmelden</button>
+    </div>
+    <div id="header">
+        <div id="menu-toggle" onclick="toggleSidebar()">≡</div>
+        <div id="display-name" style="font-size: 20px;">Klassen Chat</div>
+    </div>
+    <div id="chat-window" onclick="hideContextMenu()"></div>
+    
+    <div class="input-area">
+        <label class="icon-btn">
+            📎 <input type="file" id="image-input" accept="image/*" style="display:none" onchange="sendImage(this)">
+        </label>
+        <input type="text" id="message-input" placeholder="Nachricht schreiben..." autocomplete="off">
+        <button onclick="send()" id="send-btn">➤</button>
+    </div>
+</div>
+
+<script type="module">
+  import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+  import { getDatabase, ref, push, onChildAdded, onChildChanged, onChildRemoved, onValue, off, update, remove, set } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+  import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut, updatePassword, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyCFLAzI8zdyNW_jqda_N0Clzy5k_dypI0E",
+    authDomain: "meinchat-18136.firebaseapp.com",
+    databaseURL: "https://meinchat-18136-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "meinchat-18136",
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app);
+  const auth = getAuth(app);
+  let currentName = "";
+  let currentRoom = "global";
+  let isAdmin = false;
+  let selectedMsgId = null;
+
+  onAuthStateChanged(auth, (user) => {
+    if (user) {
+      document.getElementById('auth-container').style.display = 'none';
+      currentName = user.email.split('@')[0];
+      isAdmin = currentName.toLowerCase() === "benedict";
+      if(isAdmin) {
+          document.getElementById('admin-group-tools').style.display = 'block';
+          document.getElementById('btn-admin-hard-delete').style.display = 'block';
+      }
+      loadGroups();
+      switchRoom('global');
+    } else {
+      document.getElementById('auth-container').style.display = 'flex';
+    }
+  });
+
+  document.getElementById('message-input').onkeypress = (e) => {
+      if (e.key === 'Enter') send();
+  };
+
+  window.sendImage = function(input) {
+      if (input.files && input.files[0]) {
+          const reader = new FileReader();
+          reader.onload = e => pushMsg({ type: 'image', content: e.target.result });
+          reader.readAsDataURL(input.files[0]);
+      }
+  };
+
+  window.switchRoom = function(roomName) {
+    const oldPath = currentRoom === 'ai_chat' ? `ai_chats/${currentName}` : currentRoom;
+    off(ref(db, 'chat_data/' + oldPath));
+    currentRoom = roomName;
+    document.getElementById('chat-window').innerHTML = "";
+    document.getElementById('display-name').innerText = roomName === 'global' ? "Klassen Chat" : "🤖 KI Assistent";
+    listenToRoom(roomName === 'ai_chat' ? `ai_chats/${currentName}` : roomName);
+    document.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('active'));
+    if(roomName === 'global') document.getElementById('item-global').classList.add('active');
+    if(roomName === 'ai_chat') document.getElementById('item-ai').classList.add('active');
+    if(document.getElementById('sidebar').classList.contains('open')) toggleSidebar();
+  };
+
+  function listenToRoom(roomPath) {
+    const roomRef = ref(db, 'chat_data/' + roomPath);
+    onChildAdded(roomRef, (snap) => renderMsg(snap.key, snap.val()));
+    onChildChanged(roomRef, (snap) => {
+        const el = document.getElementById("msg-" + snap.key);
+        if(el) el.querySelector('.msg-body').innerHTML = "<i>Diese Nachricht wurde gelöscht</i>";
+    });
+    onChildRemoved(roomRef, (snap) => document.getElementById("msg-" + snap.key)?.remove());
+  }
+
+  function renderMsg(id, data) {
+    const div = document.createElement('div');
+    div.id = "msg-" + id;
+    div.className = 'message' + (data.sender === currentName ? ' my-message' : '');
+    let contentHtml = `<span class="msg-body">${data.content}</span>`;
+    if(data.type === 'image') contentHtml = `<img src="${data.content}">`;
+    div.innerHTML = `<b>${data.sender}</b>${contentHtml}`;
+    div.oncontextmenu = (e) => { e.preventDefault(); showContextMenu(e.pageX, e.pageY, id, data.sender); };
+    document.getElementById('chat-window').appendChild(div);
+    document.getElementById('chat-window').scrollTop = document.getElementById('chat-window').scrollHeight;
+  }
+
+  window.send = async function() {
+    const input = document.getElementById('message-input');
+    const text = input.value.trim();
+    if (!text) return;
+    if(isAdmin && text.startsWith("/adduser ")) {
+        const parts = text.split(" ");
+        adminCreateUser(parts[1], parts[2]);
+        input.value = ""; return;
+    }
+    pushMsg({ type: 'text', content: text });
+    if(currentRoom === 'ai_chat') {
+        const aiReply = await getAIResponse(text);
+        pushMsg({ type: 'text', content: aiReply, sender: "KI" });
+    }
+    input.value = "";
+    input.focus();
+  };
+
+  function pushMsg(msgObj) {
+      const path = currentRoom === 'ai_chat' ? `ai_chats/${currentName}` : currentRoom;
+      push(ref(db, 'chat_data/' + path), {
+          sender: msgObj.sender || currentName,
+          content: msgObj.content,
+          type: msgObj.type || 'text',
+          timestamp: Date.now()
+      });
+  }
+
+  async function adminCreateUser(newUser, newPass) {
+    const sApp = initializeApp(firebaseConfig, "Secondary");
+    const sAuth = getAuth(sApp);
+    try {
+        await createUserWithEmailAndPassword(sAuth, newUser.toLowerCase() + "@messenger.de", newPass);
+        await set(ref(db, 'users/' + newUser.toLowerCase()), { username: newUser, password: newPass, role: "user" });
+        alert("Nutzer erstellt!");
+    } catch (e) { alert(e.message); } finally { await deleteApp(sApp); }
+  }
+
+  async function getAIResponse(p) {
+      const r = await fetch(`https://text.pollinations.ai/${encodeURIComponent(p)}?model=openai&system=Antworte+kurz+auf+Deutsch.`);
+      return await r.text();
+  }
+
+  window.handleAuth = () => {
+    const n = document.getElementById('username').value.trim();
+    const p = document.getElementById('password').value;
+    signInWithEmailAndPassword(auth, n.toLowerCase() + "@messenger.de", p).catch(() => alert("Fehler!"));
+  };
+
+  window.changeOwnPassword = async function() {
+      const newPass = document.getElementById('change-pw-input').value.trim();
+      if (newPass.length < 6) return alert("Min. 6 Zeichen!");
+      try {
+          await updatePassword(auth.currentUser, newPass);
+          await update(ref(db, 'users/' + currentName.toLowerCase()), { password: newPass });
+          alert("Passwort geändert!");
+          document.getElementById('change-pw-input').value = "";
+      } catch (e) { alert("Fehler: Bitte neu einloggen."); }
+  };
+
+  window.logout = () => signOut(auth);
+  window.toggleSidebar = () => document.getElementById('sidebar').classList.toggle('open');
+  window.hideContextMenu = () => document.getElementById('context-menu').style.display = 'none';
+  function showContextMenu(x, y, id, sender) {
+      if(sender !== currentName && !isAdmin) return;
+      selectedMsgId = id;
+      const menu = document.getElementById('context-menu');
+      menu.style.display = 'block'; menu.style.left = x + 'px'; menu.style.top = y + 'px';
+  }
+  document.getElementById('btn-soft-delete').onclick = () => {
+      const path = currentRoom === 'ai_chat' ? `ai_chats/${currentName}` : currentRoom;
+      update(ref(db, `chat_data/${path}/${selectedMsgId}`), { content: "Diese Nachricht wurde gelöscht", type: 'text' });
+      hideContextMenu();
+  };
+  document.getElementById('btn-admin-hard-delete').onclick = () => {
+      const path = currentRoom === 'ai_chat' ? `ai_chats/${currentName}` : currentRoom;
+      remove(ref(db, `chat_data/${path}/${selectedMsgId}`));
+      hideContextMenu();
+  };
+  function loadGroups() {
+    onValue(ref(db, 'groups'), (snap) => {
+      const list = document.getElementById('group-list'); list.innerHTML = "";
+      if(snap.exists()) Object.values(snap.val()).forEach(g => {
+        const d = document.createElement('div'); d.className = 'sidebar-item';
+        d.innerText = "# " + g.name; d.onclick = () => switchRoom(g.name); list.appendChild(d);
+      });
+    });
+  }
+  window.createGroup = () => {
+    const name = document.getElementById('new-group-name').value.trim();
+    if(name && isAdmin) push(ref(db, 'groups'), { name: name });
+  };
+</script>
+</body>
+</html>
